@@ -7,7 +7,6 @@ import {
   detectRuntimes,
   buildCommand,
   getRuntimeSummary,
-  getAvailableLanguages,
   type RuntimeMap,
 } from "../src/runtime.js";
 
@@ -965,6 +964,72 @@ IO.puts("has users: #{String.contains?(file_content, "users")}")
     });
   }
 
+  // --- UTF-8 / Non-ASCII file content ---
+  const utf8File = join(testDir, "utf8-data.txt");
+  writeFileSync(utf8File, "这是中文内容\n日本語テスト\n한국어\nEmoji: 🔒✅\nLine 5", "utf-8");
+
+  await test("execute_file: Python reads UTF-8 non-ASCII content", async () => {
+    const r = await executor.executeFile({
+      path: utf8File,
+      language: "python",
+      code: `
+lines = FILE_CONTENT.strip().split('\\n')
+print(f"lines: {len(lines)}")
+print(f"first: {lines[0]}")
+print(f"has_emoji: {'🔒' in FILE_CONTENT}")
+      `,
+    });
+    assert.equal(r.exitCode, 0, "Python UTF-8 exit code: " + r.stderr);
+    assert.ok(r.stdout.includes("lines: 5"), "Should have 5 lines");
+    assert.ok(r.stdout.includes("first: 这是中文内容"), "Should read Chinese");
+    assert.ok(r.stdout.includes("has_emoji: True"), "Should find emoji");
+  });
+
+  await test("execute_file: JS reads UTF-8 non-ASCII content", async () => {
+    const r = await executor.executeFile({
+      path: utf8File,
+      language: "javascript",
+      code: `
+const lines = FILE_CONTENT.trim().split('\\n');
+console.log("lines: " + lines.length);
+console.log("first: " + lines[0]);
+console.log("has_emoji: " + FILE_CONTENT.includes('🔒'));
+      `,
+    });
+    assert.equal(r.exitCode, 0);
+    assert.ok(r.stdout.includes("lines: 5"));
+    assert.ok(r.stdout.includes("first: 这是中文内容"));
+    assert.ok(r.stdout.includes("has_emoji: true"));
+  });
+
+  if (runtimes.ruby) {
+    await test("execute_file: Ruby reads UTF-8 non-ASCII content", async () => {
+      const r = await executor.executeFile({
+        path: utf8File,
+        language: "ruby",
+        code: `
+lines = FILE_CONTENT.strip.split("\\n")
+puts "lines: #{lines.length}"
+puts "first: #{lines[0]}"
+puts "has_emoji: #{FILE_CONTENT.include?('🔒')}"
+        `,
+      });
+      assert.equal(r.exitCode, 0, "Ruby UTF-8 exit code: " + r.stderr);
+      assert.ok(r.stdout.includes("lines: 5"));
+      assert.ok(r.stdout.includes("first: 这是中文内容"));
+    });
+  }
+
+  await test("execute_file: Shell reads UTF-8 non-ASCII content", async () => {
+    const r = await executor.executeFile({
+      path: utf8File,
+      language: "shell",
+      code: 'echo "$FILE_CONTENT" | head -1',
+    });
+    assert.equal(r.exitCode, 0);
+    assert.ok(r.stdout.includes("这是中文内容"), "Shell should read Chinese: " + r.stdout);
+  });
+
   rmSync(testDir, { recursive: true, force: true });
 
   // ===== CONCURRENCY =====
@@ -1059,11 +1124,6 @@ IO.puts("has users: #{String.contains?(file_content, "users")}")
   console.log("\n--- Temp Cleanup Resilience ---\n");
 
   await test("concurrent executions all return valid results (EBUSY resilience)", async () => {
-    // On Windows, rapid concurrent executions often trigger EBUSY when
-    // rmSync tries to delete the temp dir while Windows still holds handles.
-    // With the current code, rmSync throwing in the finally block masks
-    // the actual execution result — execute() rejects instead of resolving.
-    // This test verifies that ALL concurrent executions return valid ExecResult.
     const count = 15;
     const promises = Array.from({ length: count }, (_, i) =>
       executor.execute({
@@ -1091,9 +1151,6 @@ IO.puts("has users: #{String.contains?(file_content, "users")}")
   });
 
   await test("PATH-dependent tools accessible from executor shell", async () => {
-    // Verifies that the executor's sanitized env preserves PATH correctly.
-    // On Windows, tools like gh/node installed via Scoop/Chocolatey must be
-    // visible from the spawned shell process. If PATH is broken, this fails.
     const r = await executor.execute({
       language: "shell",
       code: 'node --version',
