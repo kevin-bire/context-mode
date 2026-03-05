@@ -376,14 +376,40 @@ server.registerTool(
     }
 
     try {
-      // For JS/TS: wrap in async IIFE with fetch interceptor to track network bytes
+      // For JS/TS: wrap in async IIFE with fetch + http/https interceptors to track network bytes
       let instrumentedCode = code;
       if (language === "javascript" || language === "typescript") {
         instrumentedCode = `
-let __cm_net=0;const __cm_f=globalThis.fetch;
+let __cm_net=0;
+// Intercept globalThis.fetch
+const __cm_f=globalThis.fetch;
 globalThis.fetch=async(...a)=>{const r=await __cm_f(...a);
 try{const cl=r.clone();const b=await cl.arrayBuffer();__cm_net+=b.byteLength}catch{}
 return r};
+// Intercept http/https .get and .request to track Node-style network I/O
+(function(){
+  try{
+    for(const mod of ['http','https']){
+      const m=require(mod);
+      const origGet=m.get,origReq=m.request;
+      function wrap(origFn){return function(...a){
+        const req=origFn.apply(m,a);
+        const origOn=req.on.bind(req);
+        req.on=function(ev,cb,...r){
+          if(ev==='response'){
+            return origOn(ev,function(res){
+              res.on('data',function(c){__cm_net+=c.length});
+              cb(res);
+            },...r);
+          }
+          return origOn(ev,cb,...r);
+        };
+        return req;
+      }}
+      m.get=wrap(origGet);m.request=wrap(origReq);
+    }
+  }catch{}
+})();
 async function __cm_main(){
 ${code}
 }
