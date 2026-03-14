@@ -41,6 +41,7 @@ import type { HookInput } from "./session/extract.js";
 import { buildResumeSnapshot } from "./session/snapshot.js";
 import type { SessionEvent } from "./types.js";
 import { OpenClawAdapter } from "./adapters/openclaw/index.js";
+import { WorkspaceRouter } from "./openclaw/workspace-router.js";
 
 // ── OpenClaw Plugin API Types ─────────────────────────────
 
@@ -222,6 +223,8 @@ export default {
     // Create temp session so after_tool_call events before session_start have a valid row
     db.ensureSession(sessionId, projectDir);
 
+    const workspaceRouter = new WorkspaceRouter();
+
     // Load routing instructions synchronously for prompt injection
     let routingInstructions = "";
     try {
@@ -331,11 +334,14 @@ export default {
 
           const events = extractEvents(hookInput);
 
+          // Resolve agent-specific sessionId from workspace paths in params
+          const routedSessionId = workspaceRouter.resolveSessionId(e.params ?? {}) ?? sessionId;
+
           if (events.length > 0) {
             for (const ev of events) {
-              db.insertEvent(sessionId, ev as SessionEvent, "PostToolUse");
+              db.insertEvent(routedSessionId, ev as SessionEvent, "PostToolUse");
             }
-            log.debug(`tool_call:after [${mappedToolName}] → ${events.length} event(s) captured`);
+            log.debug(`tool_call:after [${mappedToolName}] → ${events.length} event(s) routed to ${routedSessionId.slice(0, 8)}…`);
           } else if (rawToolName) {
             // Fallback: record any unrecognized tool call as a generic event
             const data = JSON.stringify({
@@ -344,7 +350,7 @@ export default {
               durationMs: e.durationMs,
             });
             db.insertEvent(
-              sessionId,
+              routedSessionId,
               {
                 type: "tool_call",
                 category: "openclaw",
@@ -357,7 +363,7 @@ export default {
               },
               "PostToolUse",
             );
-            log.debug(`tool_call:after [${rawToolName}] → generic fallback event captured`);
+            log.debug(`tool_call:after [${rawToolName}] → generic fallback routed to ${routedSessionId.slice(0, 8)}…`);
           }
         } catch {
           // Silent — session capture must never break the tool call
@@ -444,6 +450,9 @@ export default {
           }
 
           sessionId = sid as ReturnType<typeof randomUUID>;
+          if (key) {
+            workspaceRouter.registerSession(key, sessionId);
+          }
           resumeInjected = false;
         } catch {
           // best effort — never break session start
