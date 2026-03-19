@@ -36,6 +36,61 @@ function runHook(hookFile: string, input: Record<string, unknown>, env?: Record<
   };
 }
 
+// ── session-loaders.mjs bundle resolution ────────────────
+
+describe("createSessionLoaders — bundle directory resolution", () => {
+  const hooksDir = join(__dirname, "..", "..", "hooks");
+
+  test("resolves bundles when hookDir has trailing slash (vscode-copilot/)", async () => {
+    // This is how sessionstart.mjs derives HOOK_DIR:
+    //   fileURLToPath(new URL(".", import.meta.url)) → always has trailing /
+    const hookDirWithSlash = join(hooksDir, "vscode-copilot") + "/";
+
+    const { createSessionLoaders } = await import(
+      join(hooksDir, "session-loaders.mjs")
+    );
+    const loaders = createSessionLoaders(hookDirWithSlash);
+
+    // Must not throw ERR_MODULE_NOT_FOUND — bundles live in hooks/, not hooks/vscode-copilot/
+    const mod = await loaders.loadSessionDB();
+    expect(mod.SessionDB).toBeDefined();
+  });
+
+  test.skipIf(process.platform !== "win32")("resolves bundles when hookDir has trailing backslash (Windows)", async () => {
+    const hookDirWithBackslash = join(hooksDir, "vscode-copilot") + "\\";
+
+    const { createSessionLoaders } = await import(
+      join(hooksDir, "session-loaders.mjs")
+    );
+    const loaders = createSessionLoaders(hookDirWithBackslash);
+
+    const mod = await loaders.loadSessionDB();
+    expect(mod.SessionDB).toBeDefined();
+  });
+
+  test("resolves bundles when hookDir has no trailing separator", async () => {
+    const hookDirClean = join(hooksDir, "vscode-copilot");
+
+    const { createSessionLoaders } = await import(
+      join(hooksDir, "session-loaders.mjs")
+    );
+    const loaders = createSessionLoaders(hookDirClean);
+
+    const mod = await loaders.loadSessionDB();
+    expect(mod.SessionDB).toBeDefined();
+  });
+
+  test("resolves bundles from root hooks dir (non-vscode path)", async () => {
+    const { createSessionLoaders } = await import(
+      join(hooksDir, "session-loaders.mjs")
+    );
+    const loaders = createSessionLoaders(hooksDir);
+
+    const mod = await loaders.loadSessionDB();
+    expect(mod.SessionDB).toBeDefined();
+  });
+});
+
 describe("VS Code Copilot hooks", () => {
   let tempDir: string;
   let dbPath: string;
