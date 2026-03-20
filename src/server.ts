@@ -1791,7 +1791,10 @@ server.registerTool(
   },
   async () => {
     const pluginRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-    const cmd = `node "${pluginRoot}/build/cli.js" doctor`;
+    const bundlePath = resolve(pluginRoot, "cli.bundle.mjs");
+    const fallbackPath = resolve(pluginRoot, "build", "cli.js");
+    const cliPath = existsSync(bundlePath) ? bundlePath : fallbackPath;
+    const cmd = `node "${cliPath}" doctor`;
 
     const text = [
       "## ctx-doctor",
@@ -1836,7 +1839,10 @@ server.registerTool(
   },
   async () => {
     const pluginRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-    const cmd = `node "${pluginRoot}/build/cli.js" upgrade`;
+    const bundlePath = resolve(pluginRoot, "cli.bundle.mjs");
+    const fallbackPath = resolve(pluginRoot, "build", "cli.js");
+    const cliPath = existsSync(bundlePath) ? bundlePath : fallbackPath;
+    const cmd = `node "${cliPath}" upgrade`;
 
     const text = [
       "## ctx-upgrade",

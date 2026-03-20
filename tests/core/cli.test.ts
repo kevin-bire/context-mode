@@ -520,6 +520,48 @@ describe("Cross-OS compatibility", () => {
   });
 });
 
+// ── Bin entry: cli.bundle.mjs ─────────────────────────────────────────
+
+describe("Bin entry uses cli.bundle.mjs", () => {
+  const pkg = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf-8"));
+
+  it("package.json bin points to cli.bundle.mjs, not build/cli.js", () => {
+    expect(pkg.bin["context-mode"]).toBe("./cli.bundle.mjs");
+  });
+
+  it("package.json exports ./cli points to cli.bundle.mjs", () => {
+    expect(pkg.exports["./cli"]).toBe("./cli.bundle.mjs");
+  });
+
+  it("server.ts ctx_doctor uses cli.bundle.mjs with fallback", () => {
+    const src = readFileSync(resolve(ROOT, "src", "server.ts"), "utf-8");
+    // ctx_doctor handler must prefer cli.bundle.mjs
+    const doctorSection = src.slice(src.indexOf("ctx_doctor"), src.indexOf("ctx_doctor") + 500);
+    expect(doctorSection).toContain("cli.bundle.mjs");
+  });
+
+  it("server.ts ctx_upgrade uses cli.bundle.mjs with fallback", () => {
+    const src = readFileSync(resolve(ROOT, "src", "server.ts"), "utf-8");
+    // ctx_upgrade handler must prefer cli.bundle.mjs
+    const upgradeSection = src.slice(src.indexOf("ctx_upgrade"), src.indexOf("ctx_upgrade") + 800);
+    expect(upgradeSection).toContain("cli.bundle.mjs");
+  });
+
+  it("openclaw-plugin.ts doctor/upgrade use cli.bundle.mjs with fallback", () => {
+    const src = readFileSync(resolve(ROOT, "src", "openclaw-plugin.ts"), "utf-8");
+    expect(src).toContain("cli.bundle.mjs");
+    // Find the registerCommand blocks, not comments
+    const doctorIdx = src.indexOf('name: "ctx-doctor"');
+    const upgradeIdx = src.indexOf('name: "ctx-upgrade"');
+    expect(doctorIdx).toBeGreaterThan(-1);
+    expect(upgradeIdx).toBeGreaterThan(-1);
+    const doctorSection = src.slice(doctorIdx, doctorIdx + 500);
+    const upgradeSection = src.slice(upgradeIdx, upgradeIdx + 500);
+    expect(doctorSection).toContain("cli.bundle.mjs");
+    expect(upgradeSection).toContain("cli.bundle.mjs");
+  });
+});
+
 // ── Package exports ───────────────────────────────────────────────────
 
 describe("Package exports", () => {

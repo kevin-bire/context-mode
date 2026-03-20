@@ -654,7 +654,10 @@ export default {
         name: "ctx-doctor",
         description: "Run context-mode diagnostics",
         handler: () => {
-          const cmd = `node "${_latestPluginRoot}/build/cli.js" doctor`;
+          const bundlePath = resolve(_latestPluginRoot, "cli.bundle.mjs");
+          const fallbackPath = resolve(_latestPluginRoot, "build", "cli.js");
+          const cliPath = existsSync(bundlePath) ? bundlePath : fallbackPath;
+          const cmd = `node "${cliPath}" doctor`;
           return {
             text: [
               "## ctx-doctor",
@@ -673,7 +676,10 @@ export default {
         name: "ctx-upgrade",
         description: "Upgrade context-mode to the latest version",
         handler: () => {
-          const cmd = `node "${_latestPluginRoot}/build/cli.js" upgrade`;
+          const bundlePath = resolve(_latestPluginRoot, "cli.bundle.mjs");
+          const fallbackPath = resolve(_latestPluginRoot, "build", "cli.js");
+          const cliPath = existsSync(bundlePath) ? bundlePath : fallbackPath;
+          const cmd = `node "${cliPath}" upgrade`;
           return {
             text: [
               "## ctx-upgrade",
