@@ -452,16 +452,18 @@ describe("bun:sqlite adapter (#45)", () => {
     db.close();
   });
 
-  test("loadDatabase: validates require result is a usable constructor (#163)", () => {
-    // Bun's require("better-sqlite3") doesn't throw — it logs an error and returns undefined.
-    // Even worse: Bun may return a function stub that crashes on instantiation.
-    // loadDatabase() must validate the result WORKS, not just check typeof.
+  test("loadDatabase: checks globalThis.Bun before choosing driver (#163)", () => {
+    // Bun's require("better-sqlite3") returns a non-functional stub.
+    // loadDatabase() must check globalThis.Bun FIRST and use bun:sqlite directly.
     const src = readFileSync(resolve(ROOT, "src", "db-base.ts"), "utf-8");
     const loadDbSection = src.slice(src.indexOf("function loadDatabase"), src.indexOf("return _Database"));
-    // Must NOT directly assign require result without validation
-    expect(loadDbSection).not.toMatch(/_Database\s*=\s*require\s*\(/);
-    // Must actually instantiate a test DB to prove it works (not just typeof check)
-    expect(loadDbSection).toContain(":memory:");
+    // Must check Bun runtime before loading any driver
+    expect(loadDbSection).toContain("globalThis");
+    expect(loadDbSection).toContain("Bun");
+    // Bun path must use bun:sqlite via BunSQLiteAdapter
+    expect(loadDbSection).toContain("BunSQLiteAdapter");
+    // Node path uses better-sqlite3
+    expect(loadDbSection).toContain("better-sqlite3");
   });
 
   test("loadDatabase: falls back to BunSQLiteAdapter when better-sqlite3 unavailable", async () => {
