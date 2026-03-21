@@ -444,12 +444,12 @@ async function upgrade() {
     execSync("npm install --no-audit --no-fund", {
       cwd: srcDir,
       stdio: "pipe",
-      timeout: 60000,
+      timeout: 120000,
     });
     execSync("npm run build", {
       cwd: srcDir,
       stdio: "pipe",
-      timeout: 30000,
+      timeout: 60000,
     });
     s.stop("Built successfully");
 
