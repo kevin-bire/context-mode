@@ -1790,7 +1790,8 @@ server.registerTool(
   },
   async () => {
     const lines: string[] = ["## context-mode doctor", ""];
-    const pluginRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+    // __pkg_dir is build/ for tsc, plugin root for bundle — resolve to plugin root
+    const pluginRoot = existsSync(resolve(__pkg_dir, "package.json")) ? __pkg_dir : dirname(__pkg_dir);
 
     // Runtimes
     const total = 11;
@@ -1864,7 +1865,8 @@ server.registerTool(
     inputSchema: z.object({}),
   },
   async () => {
-    const pluginRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+    // __pkg_dir is build/ for tsc, plugin root for bundle — resolve to plugin root
+    const pluginRoot = existsSync(resolve(__pkg_dir, "package.json")) ? __pkg_dir : dirname(__pkg_dir);
     const bundlePath = resolve(pluginRoot, "cli.bundle.mjs");
     const fallbackPath = resolve(pluginRoot, "build", "cli.js");
 
