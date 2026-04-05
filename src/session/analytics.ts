@@ -479,14 +479,27 @@ export function formatReport(report: FullReport, version?: string, latestVersion
     }
   }
 
-  // ── Footer: continuity + version + outdated warning ──
+  // ── Session continuity breakdown ──
+  if (report.continuity.by_category.length > 0) {
+    lines.push("");
+    lines.push(`Session continuity: ${report.continuity.total_events} events preserved across ${report.continuity.compact_count} compaction${report.continuity.compact_count !== 1 ? "s" : ""}`);
+    lines.push("");
+    for (const c of report.continuity.by_category) {
+      const cat = c.category.padEnd(9);
+      const count = String(c.count).padStart(3);
+      const preview = c.preview.length > 45 ? c.preview.slice(0, 42) + "..." : c.preview;
+      lines.push(`  ${cat} ${count}   ${preview.padEnd(47)} ${c.why}`);
+    }
+  }
+
+  // ── Footer: version + outdated warning ──
   const footerParts: string[] = [];
-  if (report.continuity.compact_count > 0) {
+  if (report.continuity.by_category.length === 0 && report.continuity.compact_count > 0) {
     footerParts.push(
       `${report.continuity.compact_count} compaction${report.continuity.compact_count !== 1 ? "s" : ""}`,
     );
   }
-  if (report.continuity.total_events > 0) {
+  if (report.continuity.by_category.length === 0 && report.continuity.total_events > 0) {
     footerParts.push(
       `${report.continuity.total_events} event${report.continuity.total_events !== 1 ? "s" : ""} preserved`,
     );

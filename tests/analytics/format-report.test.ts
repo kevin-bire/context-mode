@@ -234,7 +234,7 @@ describe("formatReport", () => {
   });
 
   describe("continuity footer", () => {
-    it("shows compactions and events in footer", () => {
+    it("shows compactions and events in footer when no by_category", () => {
       const report = makeReport({
         savings: {
           ...makeReport().savings,
@@ -275,6 +275,137 @@ describe("formatReport", () => {
 
       expect(output).not.toContain("compaction");
       expect(output).toContain("10 events preserved");
+    });
+  });
+
+  describe("continuity breakdown by category", () => {
+    it("shows continuity breakdown by category when events exist", () => {
+      const report = makeReport({
+        savings: {
+          ...makeReport().savings,
+          total_calls: 10,
+          total_bytes_returned: 2000,
+          kept_out: 100000,
+        },
+        continuity: {
+          total_events: 25,
+          by_category: [
+            { category: "file", count: 12, label: "Files tracked", preview: "server.ts, db.ts, utils.ts", why: "Restored after compact — no need to re-read" },
+            { category: "git", count: 5, label: "Git operations", preview: "feat: add analytics", why: "Branch, commit, and repo state preserved" },
+            { category: "decision", count: 4, label: "Your decisions", preview: "Use vitest for testing", why: "Applied automatically — won\u2019t ask again" },
+            { category: "task", count: 4, label: "Tasks in progress", preview: "Implement session continuity", why: "Picks up from where it stopped" },
+          ],
+          compact_count: 2,
+          resume_ready: true,
+        },
+      });
+      const output = formatReport(report, "1.0.71");
+
+      expect(output).toContain("Session continuity: 25 events preserved across 2 compactions");
+      expect(output).toContain("file");
+      expect(output).toContain("git");
+      expect(output).toContain("decision");
+      expect(output).toContain("task");
+    });
+
+    it("hides continuity section when no events", () => {
+      const report = makeReport({
+        savings: {
+          ...makeReport().savings,
+          total_calls: 5,
+          total_bytes_returned: 1000,
+          kept_out: 50000,
+        },
+        continuity: {
+          total_events: 0,
+          by_category: [],
+          compact_count: 0,
+          resume_ready: false,
+        },
+      });
+      const output = formatReport(report);
+
+      expect(output).not.toContain("Session continuity:");
+    });
+
+    it("shows preview and why for each category", () => {
+      const report = makeReport({
+        savings: {
+          ...makeReport().savings,
+          total_calls: 10,
+          total_bytes_returned: 2000,
+          kept_out: 100000,
+        },
+        continuity: {
+          total_events: 8,
+          by_category: [
+            { category: "file", count: 5, label: "Files tracked", preview: "server.ts, db.ts", why: "Restored after compact — no need to re-read" },
+            { category: "error", count: 3, label: "Errors caught", preview: "TypeError: cannot read", why: "Tracked and monitored across compacts" },
+          ],
+          compact_count: 1,
+          resume_ready: false,
+        },
+      });
+      const output = formatReport(report, "1.0.71");
+
+      // Check preview content appears
+      expect(output).toContain("server.ts, db.ts");
+      expect(output).toContain("TypeError: cannot read");
+      // Check why labels appear
+      expect(output).toContain("Restored after compact");
+      expect(output).toContain("Tracked and monitored across compacts");
+    });
+
+    it("truncates long previews to 45 chars", () => {
+      const longPreview = "a".repeat(60);
+      const report = makeReport({
+        savings: {
+          ...makeReport().savings,
+          total_calls: 5,
+          total_bytes_returned: 1000,
+          kept_out: 50000,
+        },
+        continuity: {
+          total_events: 3,
+          by_category: [
+            { category: "file", count: 3, label: "Files tracked", preview: longPreview, why: "Restored after compact — no need to re-read" },
+          ],
+          compact_count: 1,
+          resume_ready: false,
+        },
+      });
+      const output = formatReport(report, "1.0.71");
+
+      // Preview should be truncated with "..."
+      expect(output).toContain("...");
+      // Should NOT contain the full 60-char string
+      expect(output).not.toContain(longPreview);
+    });
+
+    it("does not show footer compaction/events when breakdown is shown", () => {
+      const report = makeReport({
+        savings: {
+          ...makeReport().savings,
+          total_calls: 5,
+          total_bytes_returned: 1000,
+          kept_out: 50000,
+        },
+        continuity: {
+          total_events: 10,
+          by_category: [
+            { category: "file", count: 10, label: "Files tracked", preview: "a.ts", why: "Restored after compact — no need to re-read" },
+          ],
+          compact_count: 2,
+          resume_ready: false,
+        },
+      });
+      const output = formatReport(report, "1.0.71");
+      const footerLine = output.split("\n").find((l) => l.includes("v1.0.71"));
+
+      // Footer should have version but NOT duplicate compaction/events info
+      expect(footerLine).toBeDefined();
+      expect(footerLine).not.toContain("compaction");
+      expect(footerLine).not.toContain("events preserved");
     });
   });
 
