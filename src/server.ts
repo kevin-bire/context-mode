@@ -1058,6 +1058,7 @@ server.registerTool(
       "- README files, migration guides, changelog entries\n" +
       "- Any content with code examples you may need to reference precisely\n\n" +
       "After indexing, use 'search' to retrieve specific sections on-demand.\n" +
+      "When `path` is provided, a content hash is stored for automatic stale detection in search results.\n" +
       "Do NOT use for: log files, test output, CSV, build output — use 'execute_file' for those.",
     inputSchema: z.object({
       content: z
@@ -1172,7 +1173,8 @@ server.registerTool(
     title: "Search Indexed Content",
     description:
       "Search indexed content. Requires prior indexing via ctx_batch_execute, ctx_index, or ctx_fetch_and_index. " +
-      "Pass ALL search questions as queries array in ONE call.\n\n" +
+      "Pass ALL search questions as queries array in ONE call. " +
+      "File-backed sources are auto-refreshed when the source file changes.\n\n" +
       "TIPS: 2-4 specific terms per query. Use 'source' to scope results.",
     inputSchema: z.object({
       queries: z.preprocess(coerceJsonArray, z
@@ -1292,6 +1294,11 @@ server.registerTool(
       }
 
       let output = sections.join("\n\n---\n\n");
+
+      // Report auto-refreshed stale sources
+      if (store.lastRefreshCount > 0) {
+        output = `> Auto-refreshed ${store.lastRefreshCount} stale source${store.lastRefreshCount > 1 ? "s" : ""} (file changed since indexing).\n\n` + output;
+      }
 
       // Add throttle warning after threshold
       if (searchCallCount >= SEARCH_MAX_RESULTS_AFTER) {
