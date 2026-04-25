@@ -451,7 +451,7 @@ Full documentation: [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md)
    ```json
    {
      "hooks": {
-       "PreToolUse": [{ "hooks": [{ "type": "command", "command": "context-mode hook codex pretooluse" }] }],
+       "PreToolUse": [{ "matcher": "Bash|Shell", "hooks": [{ "type": "command", "command": "context-mode hook codex pretooluse" }] }],
        "PostToolUse": [{ "hooks": [{ "type": "command", "command": "context-mode hook codex posttooluse" }] }],
        "SessionStart": [{ "hooks": [{ "type": "command", "command": "context-mode hook codex sessionstart" }] }]
      }
@@ -507,7 +507,7 @@ Full documentation: [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md)
    ```json
    {
      "hooks": {
-       "PreToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "context-mode hook qwen-code pretooluse" }] }],
+       "PreToolUse": [{ "matcher": "Bash|Read|Grep|WebFetch|Agent|run_shell_command|read_file|grep_search|web_fetch|agent|mcp__plugin_context-mode_context-mode__ctx_execute|mcp__plugin_context-mode_context-mode__ctx_execute_file|mcp__plugin_context-mode_context-mode__ctx_batch_execute", "hooks": [{ "type": "command", "command": "context-mode hook qwen-code pretooluse" }] }],
        "PostToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "context-mode hook qwen-code posttooluse" }] }],
        "SessionStart": [{ "matcher": "", "hooks": [{ "type": "command", "command": "context-mode hook qwen-code sessionstart" }] }],
        "PreCompact": [{ "matcher": "", "hooks": [{ "type": "command", "command": "context-mode hook qwen-code precompact" }] }],
@@ -606,7 +606,7 @@ Full configs: [`configs/antigravity/mcp_config.json`](configs/antigravity/mcp_co
      "description": "Context-mode hooks for context window protection",
      "hooks": {
        "preToolUse": [
-         { "matcher": "*", "command": "context-mode hook kiro pretooluse" }
+         { "matcher": "execute_bash|fs_read|@context-mode/ctx_execute|@context-mode/ctx_execute_file|@context-mode/ctx_batch_execute", "command": "context-mode hook kiro pretooluse" }
        ],
        "postToolUse": [
          { "matcher": "*", "command": "context-mode hook kiro posttooluse" }

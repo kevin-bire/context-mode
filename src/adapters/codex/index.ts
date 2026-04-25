@@ -231,7 +231,7 @@ export class CodexAdapter implements HookAdapter {
     return {
       PreToolUse: [
         {
-          matcher: "",
+          matcher: "Bash|Shell",
           hooks: [
             {
               type: "command",

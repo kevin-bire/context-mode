@@ -246,7 +246,7 @@ export class GeminiCLIAdapter implements HookAdapter {
     return {
       [GEMINI_HOOK_NAMES.BEFORE_TOOL]: [
         {
-          matcher: "",
+          matcher: "run_shell_command|read_file|read_many_files|grep_search|search_file_content|web_fetch|activate_skill|mcp__plugin_context-mode",
           hooks: [
             {
               type: "command",

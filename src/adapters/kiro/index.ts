@@ -33,6 +33,7 @@ import { homedir } from "node:os";
 
 import {
   HOOK_TYPES as KIRO_HOOK_TYPES,
+  PRE_TOOL_USE_MATCHER_PATTERN as KIRO_PRE_TOOL_USE_MATCHER_PATTERN,
   buildHookCommand as buildKiroHookCommand,
   isContextModeHook as isKiroContextModeHook,
 } from "./hooks.js";
@@ -179,7 +180,7 @@ export class KiroAdapter implements HookAdapter {
     // Note: This generates the entries for agent config files
     return {
       [KIRO_HOOK_TYPES.PRE_TOOL_USE]: [{
-        matcher: "*",
+        matcher: KIRO_PRE_TOOL_USE_MATCHER_PATTERN,
         hooks: [{ type: "command", command: buildKiroHookCommand(KIRO_HOOK_TYPES.PRE_TOOL_USE, pluginRoot) }],
       }],
       [KIRO_HOOK_TYPES.POST_TOOL_USE]: [{
@@ -324,7 +325,7 @@ export class KiroAdapter implements HookAdapter {
       const preToolUseEntries = (hooks[KIRO_HOOK_TYPES.PRE_TOOL_USE] ?? []) as Array<Record<string, unknown>>;
       if (!preToolUseEntries.some(e => isKiroContextModeHook(e as { command?: string }, KIRO_HOOK_TYPES.PRE_TOOL_USE))) {
         preToolUseEntries.push({
-          matcher: "*",
+          matcher: KIRO_PRE_TOOL_USE_MATCHER_PATTERN,
           command: buildKiroHookCommand(KIRO_HOOK_TYPES.PRE_TOOL_USE, pluginRoot),
         });
         hooks[KIRO_HOOK_TYPES.PRE_TOOL_USE] = preToolUseEntries;
