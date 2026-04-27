@@ -50,6 +50,27 @@ try {
 
   attributeAndInsertEvents(db, sessionId, events, input, projectDir, "PostToolUse", resolveProjectAttributions);
 
+  // ─── Category 18: Rejected-approach — read PreToolUse marker ───
+  try {
+    const rejectedPath = resolve(tmpdir(), `context-mode-rejected-${sessionId}.txt`);
+    let rejectedData;
+    try {
+      rejectedData = readFileSync(rejectedPath, "utf-8").trim();
+      unlinkSync(rejectedPath);
+    } catch { /* no marker */ }
+    if (rejectedData) {
+      const colonIdx = rejectedData.indexOf(":");
+      const rejTool = colonIdx > 0 ? rejectedData.slice(0, colonIdx) : rejectedData;
+      const rejReason = colonIdx > 0 ? rejectedData.slice(colonIdx + 1) : "denied";
+      db.insertEvent(sessionId, {
+        type: "rejected",
+        category: "rejected-approach",
+        data: `${rejTool}: ${rejReason}`,
+        priority: 2,
+      }, "PreToolUse");
+    }
+  } catch { /* best-effort */ }
+
   // ─── Category 27: Latency — read cross-hook marker and emit event if slow ───
   try {
     const toolName = input.tool_name ?? "";

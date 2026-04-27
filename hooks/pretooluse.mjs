@@ -18,8 +18,7 @@ import { homedir, tmpdir } from "node:os";
 import { readStdin } from "./core/stdin.mjs";
 import { routePreToolUse, initSecurity } from "./core/routing.mjs";
 import { formatDecision } from "./core/formatters.mjs";
-import { parseStdin, getSessionId, getSessionDBPath, resolveConfigDir } from "./session-helpers.mjs";
-import { createSessionLoaders } from "./session-loaders.mjs";
+import { parseStdin, getSessionId, resolveConfigDir } from "./session-helpers.mjs";
 
 // ─── Manual recursive copy (avoids cpSync libuv crash on non-ASCII paths, Windows + Node 24) ───
 function copyDirSync(src, dest) {
@@ -180,26 +179,16 @@ try {
   }
 } catch { /* latency tracking is best-effort — never block hook */ }
 
-// ─── Write rejected-approach event when tool call is denied or modified ───
+// ─── Write rejected-approach marker for PostToolUse to pick up ───
+// PreToolUse cannot safely load SessionDB (native module loading breaks hook stdout).
+// Write a marker file instead; PostToolUse reads it and writes the event.
 if (decision && (decision.action === "deny" || decision.action === "modify")) {
   try {
-    const { loadSessionDB } = createSessionLoaders(dirname(fileURLToPath(import.meta.url)));
-    const { SessionDB } = await loadSessionDB();
-    const dbPath = getSessionDBPath();
-    const db = new SessionDB({ dbPath });
     const sessionId = getSessionId(input);
-    db.ensureSession(sessionId, process.env.CLAUDE_PROJECT_DIR || process.cwd());
-
     const reason = decision.action === "deny"
-      ? decision.reason
+      ? (decision.reason || "denied")
       : "Redirected to context-mode sandbox";
-    db.insertEvent(sessionId, {
-      type: "rejected",
-      category: "rejected-approach",
-      data: `${tool}: ${reason}`,
-      priority: 2,
-    }, "PreToolUse");
-
-    db.close();
-  } catch { /* rejected-approach tracking is best-effort — never block hook */ }
+    const markerPath = resolve(tmpdir(), `context-mode-rejected-${sessionId}.txt`);
+    writeFileSync(markerPath, `${tool}:${reason}`, "utf-8");
+  } catch { /* best-effort — never block hook */ }
 }
