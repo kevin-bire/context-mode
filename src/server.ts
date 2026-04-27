@@ -1256,10 +1256,11 @@ server.registerTool(
   async (params) => {
     try {
       const store = getStore();
+      const sort = (params as Record<string, unknown>).sort as string || "relevance";
 
       // Guard: redirect when the index is empty — ctx_search is a follow-up
-      // tool that requires prior indexing. Guide the model to the right tool.
-      if (store.getStats().chunks === 0) {
+      // tool that requires prior indexing. Skip for timeline mode (SessionDB/auto-memory may have data).
+      if (sort !== "timeline" && store.getStats().chunks === 0) {
         return trackResponse("ctx_search", {
           content: [{
             type: "text" as const,
@@ -1330,7 +1331,36 @@ server.registerTool(
           continue;
         }
 
-        const results = store.searchWithFallback(q, effectiveLimit, source, contentType);
+        let results;
+        if (sort === "timeline") {
+          // Timeline mode: unified search across ContentStore + SessionDB + auto-memory
+          let timelineDB: InstanceType<typeof SessionDB> | null = null;
+          try {
+            const sessionsDir = join(homedir(), ".claude", "context-mode", "sessions");
+            const dbFile = join(sessionsDir, `${hashProjectDir()}.db`);
+            if (existsSync(dbFile)) {
+              timelineDB = new SessionDB({ dbPath: dbFile });
+            }
+          } catch { /* SessionDB unavailable — search ContentStore + auto-memory only */ }
+
+          try {
+            results = searchAllSources({
+              query: q,
+              limit: effectiveLimit,
+              store,
+              sort,
+              source,
+              contentType,
+              sessionDB: timelineDB,
+              projectDir: getProjectDir(),
+              configDir: ".claude",
+            });
+          } finally {
+            try { timelineDB?.close(); } catch {}
+          }
+        } else {
+          results = store.searchWithFallback(q, effectiveLimit, source, contentType);
+        }
 
         if (results.length === 0) {
           sections.push(`## ${q}\nNo results found.`);
