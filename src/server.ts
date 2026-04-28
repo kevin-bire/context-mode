@@ -1325,6 +1325,21 @@ server.registerTool(
       let totalSize = 0;
       const sections: string[] = [];
 
+      // Open SessionDB once before the loop (Blocker 4: avoid open/close per query)
+      let timelineDB: InstanceType<typeof SessionDB> | null = null;
+      if (sort === "timeline") {
+        try {
+          const sessionsDir = getSessionDir();
+          const dbFile = join(sessionsDir, `${hashProjectDir()}.db`);
+          if (existsSync(dbFile)) {
+            timelineDB = new SessionDB({ dbPath: dbFile });
+          }
+        } catch { /* SessionDB unavailable — search ContentStore + auto-memory only */ }
+      }
+
+      const configDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+
+      try {
       for (const q of queryList) {
         if (totalSize > MAX_TOTAL) {
           sections.push(`## ${q}\n(output cap reached)\n`);
@@ -1333,31 +1348,17 @@ server.registerTool(
 
         let results;
         if (sort === "timeline") {
-          // Timeline mode: unified search across ContentStore + SessionDB + auto-memory
-          let timelineDB: InstanceType<typeof SessionDB> | null = null;
-          try {
-            const sessionsDir = join(homedir(), ".claude", "context-mode", "sessions");
-            const dbFile = join(sessionsDir, `${hashProjectDir()}.db`);
-            if (existsSync(dbFile)) {
-              timelineDB = new SessionDB({ dbPath: dbFile });
-            }
-          } catch { /* SessionDB unavailable — search ContentStore + auto-memory only */ }
-
-          try {
-            results = searchAllSources({
-              query: q,
-              limit: effectiveLimit,
-              store,
-              sort,
-              source,
-              contentType,
-              sessionDB: timelineDB,
-              projectDir: getProjectDir(),
-              configDir: ".claude",
-            });
-          } finally {
-            try { timelineDB?.close(); } catch {}
-          }
+          results = searchAllSources({
+            query: q,
+            limit: effectiveLimit,
+            store,
+            sort,
+            source,
+            contentType,
+            sessionDB: timelineDB,
+            projectDir: getProjectDir(),
+            configDir,
+          });
         } else {
           results = store.searchWithFallback(q, effectiveLimit, source, contentType);
         }
@@ -1378,6 +1379,9 @@ server.registerTool(
 
         sections.push(`## ${q}\n\n${formatted}`);
         totalSize += formatted.length;
+      }
+      } finally {
+        try { timelineDB?.close(); } catch {}
       }
 
       let output = sections.join("\n\n---\n\n");

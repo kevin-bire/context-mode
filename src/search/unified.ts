@@ -8,8 +8,9 @@
 
 import type { ContentStore, SearchResult } from "../store.js";
 import type { SessionDB, StoredEvent } from "../session/db.js";
-import type { SessionEvent } from "../types.js";
 import { searchAutoMemory } from "./auto-memory.js";
+
+const DEBUG = process.env.DEBUG?.includes("context-mode");
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -35,7 +36,6 @@ export interface SearchAllSourcesOpts {
   source?: string;
   contentType?: "code" | "prose";
   sessionDB?: SessionDB | null;
-  sessionId?: string;
   projectDir?: string;
   configDir?: string;
 }
@@ -62,7 +62,6 @@ export function searchAllSources(opts: SearchAllSourcesOpts): UnifiedSearchResul
     source,
     contentType,
     sessionDB,
-    sessionId,
     projectDir,
     configDir,
   } = opts;
@@ -78,14 +77,15 @@ export function searchAllSources(opts: SearchAllSourcesOpts): UnifiedSearchResul
         content: r.content,
         source: r.source,
         origin: "current-session" as const,
+        timestamp: (r as any).timestamp || new Date().toISOString(),
         rank: r.rank,
         matchLayer: r.matchLayer,
         highlighted: r.highlighted,
         contentType: r.contentType,
       })),
     );
-  } catch {
-    // ContentStore search failed — continue with other sources
+  } catch (e) {
+    if (DEBUG) process.stderr.write(`[ctx] ContentStore search failed: ${e}\n`);
   }
 
   // ── Sources 2+3: timeline mode only ──
@@ -103,32 +103,17 @@ export function searchAllSources(opts: SearchAllSourcesOpts): UnifiedSearchResul
             timestamp: r.created_at,
           })),
         );
-
-        // Write knowledge-reuse event — ROI metric for unified search
-        if (dbResults.length > 0 && sessionId) {
-          try {
-            const reuseEvent: SessionEvent = {
-              type: "search_hit_prior",
-              category: "knowledge-reuse",
-              data: `Timeline search found ${dbResults.length} results from prior sessions`,
-              priority: 3,
-              data_hash: "",
-            };
-            sessionDB.ensureSession(sessionId, projectDir || "");
-            sessionDB.insertEvent(sessionId, reuseEvent, "ctx_search");
-          } catch { /* best-effort — never block search results */ }
-        }
       }
-    } catch {
-      // SessionDB search failed — continue
+    } catch (e) {
+      if (DEBUG) process.stderr.write(`[ctx] SessionDB search failed: ${e}\n`);
     }
 
     // Source 3: Auto-memory
     try {
       const memResults = searchAutoMemory([query], limit, projectDir, configDir);
       results.push(...memResults);
-    } catch {
-      // Auto-memory search failed — continue
+    } catch (e) {
+      if (DEBUG) process.stderr.write(`[ctx] auto-memory search failed: ${e}\n`);
     }
   }
 

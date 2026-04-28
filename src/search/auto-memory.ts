@@ -5,9 +5,11 @@
  * Returns results in a format compatible with the unified search pipeline.
  */
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
+
+const DEBUG = process.env.DEBUG?.includes("context-mode");
 
 export interface AutoMemoryResult {
   title: string;
@@ -69,7 +71,9 @@ export function searchAutoMemory(
           label: `memory/${file}`,
         });
       }
-    } catch { /* best-effort */ }
+    } catch (e) {
+      if (DEBUG) process.stderr.write(`[ctx] auto-memory dir scan failed: ${e}\n`);
+    }
   }
 
   // Search each candidate file for matching queries
@@ -77,6 +81,10 @@ export function searchAutoMemory(
     if (results.length >= limit) break;
 
     try {
+      // Skip files larger than 1MB to avoid memory issues
+      try {
+        if (statSync(candidate.path).size > 1_000_000) continue;
+      } catch { continue; }
       const content = readFileSync(candidate.path, "utf-8");
       const contentLower = content.toLowerCase();
 
@@ -108,7 +116,9 @@ export function searchAutoMemory(
           break; // one result per file per query batch
         }
       }
-    } catch { /* file read error — skip */ }
+    } catch (e) {
+      if (DEBUG) process.stderr.write(`[ctx] auto-memory file read failed: ${e}\n`);
+    }
   }
 
   return results.slice(0, limit);
