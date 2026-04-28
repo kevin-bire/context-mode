@@ -1370,7 +1370,9 @@ server.registerTool(
 
         const formatted = results
           .map((r, i) => {
-            const header = `--- [${r.source}] ---`;
+            const origin = (r as any).origin || "current-session";
+            const ts = (r as any).timestamp ? (r as any).timestamp.slice(0, 16).replace("T", " ") : "";
+            const header = `--- [${origin}${ts ? " | " + ts : ""} | ${r.source}] ---`;
             const heading = `### ${r.title}`;
             const snippet = extractSnippet(r.content, q, 1500, r.highlighted);
             return `${header}\n${heading}\n\n${snippet}`;

@@ -68,6 +68,10 @@ export function searchAllSources(opts: SearchAllSourcesOpts): UnifiedSearchResul
 
   const results: UnifiedSearchResult[] = [];
 
+  // Capture session start time once — used as proxy for ContentStore items
+  // (we don't know exact indexing time, but all content is from current session)
+  const sessionStartTime = new Date().toISOString();
+
   // ── Source 1: ContentStore (always, both modes) ──
   try {
     const storeResults = store.searchWithFallback(query, limit, source, contentType);
@@ -77,7 +81,7 @@ export function searchAllSources(opts: SearchAllSourcesOpts): UnifiedSearchResul
         content: r.content,
         source: r.source,
         origin: "current-session" as const,
-        timestamp: (r as any).timestamp || new Date().toISOString(),
+        timestamp: sessionStartTime,
         rank: r.rank,
         matchLayer: r.matchLayer,
         highlighted: r.highlighted,
@@ -114,6 +118,15 @@ export function searchAllSources(opts: SearchAllSourcesOpts): UnifiedSearchResul
       results.push(...memResults);
     } catch (e) {
       if (DEBUG) process.stderr.write(`[ctx] auto-memory search failed: ${e}\n`);
+    }
+  }
+
+  // ── Normalize timestamps for consistent sorting ──
+  // SQLite datetime('now') → "YYYY-MM-DD HH:MM:SS" (no T, no Z)
+  // ISO → "YYYY-MM-DDTHH:MM:SS.sssZ"
+  for (const r of results) {
+    if (r.timestamp && !r.timestamp.includes("T")) {
+      r.timestamp = r.timestamp.replace(" ", "T") + "Z";
     }
   }
 

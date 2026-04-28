@@ -112,6 +112,7 @@ export function searchAutoMemory(
             content: snippet,
             source: candidate.label,
             origin: "auto-memory",
+            timestamp: statSync(candidate.path).mtime.toISOString(),
           });
           break; // one result per file per query batch
         }

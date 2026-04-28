@@ -166,11 +166,10 @@ const toolInput = input.tool_input ?? {};
 // ─── Route and format response ───
 const decision = routePreToolUse(tool, toolInput, process.env.CLAUDE_PROJECT_DIR, "claude-code", getSessionId(input));
 const response = formatDecision("claude-code", decision);
-if (response !== null) {
-  process.stdout.write(JSON.stringify(response) + "\n");
-}
 
 // ─── Write latency marker for cross-hook timing (Category 27) ───
+// Marker writes MUST happen before stdout write — stdout is the last action
+// so the process can exit immediately after, avoiding CI test timeouts.
 try {
   const sessionId = getSessionId(input);
   if (tool) {
@@ -191,4 +190,9 @@ if (decision && (decision.action === "deny" || decision.action === "modify")) {
     const markerPath = resolve(tmpdir(), `context-mode-rejected-${sessionId}.txt`);
     writeFileSync(markerPath, `${tool}:${reason}`, "utf-8");
   } catch { /* best-effort — never block hook */ }
+}
+
+// ─── stdout write is the LAST action — process exits immediately after ───
+if (response !== null) {
+  process.stdout.write(JSON.stringify(response) + "\n");
 }
