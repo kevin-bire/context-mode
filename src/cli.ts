@@ -445,11 +445,32 @@ async function doctor(): Promise<number> {
       p.log.warn(color.yellow("FTS5 / better-sqlite3: SKIP") + color.dim(" — module not available (restart session after upgrade)"));
     } else {
       criticalFails++;
-      p.log.error(
-        color.red("FTS5 / better-sqlite3: FAIL") +
-          ` — ${message}` +
-          color.dim("\n  Try: npm rebuild better-sqlite3"),
-      );
+      // Detect better-sqlite3 native bindings-missing pattern (issue #408).
+      // The `bindings` package throws "Could not locate the bindings file"
+      // when better_sqlite3.node failed to install — typical on Windows
+      // when prebuild-install was not on PATH so install fell through to
+      // node-gyp without an MSVC toolchain.
+      const isBindingsMissing =
+        /Could not locate the bindings file/i.test(message) ||
+        /bindings\.node/i.test(message) ||
+        /\bbindings\b/i.test(message);
+      if (isBindingsMissing && process.platform === "win32") {
+        p.log.error(
+          color.red("FTS5 / better-sqlite3: FAIL") +
+            ` — ${message}` +
+            color.dim(
+              "\n  Root cause: prebuild-install was likely not on PATH, so install fell through to node-gyp without an MSVC toolchain (Windows)." +
+              "\n  Try (primary): npm install better-sqlite3   # re-resolves the dep tree and re-links the prebuild-install bin shim to fetch a prebuilt binary" +
+              "\n  Try (fallback): npm rebuild better-sqlite3",
+            ),
+        );
+      } else {
+        p.log.error(
+          color.red("FTS5 / better-sqlite3: FAIL") +
+            ` — ${message}` +
+            color.dim("\n  Try: npm rebuild better-sqlite3"),
+        );
+      }
     }
   }
 
@@ -643,6 +664,46 @@ async function upgrade() {
   const changes: string[] = [];
   const s = p.spinner();
 
+  // Step 0: Sync the marketplace clone (#418).
+  // Claude Code reads plugin metadata from ~/.claude/plugins/marketplaces/context-mode/.
+  // Without a git pull there, the marketplace stays pinned at the install-time
+  // commit and CC keeps reporting the old version even after our cache dir is
+  // updated — users then see "ctx-upgrade succeeded" but nothing actually
+  // changed at the plugin-system level.
+  const marketplaceDir = resolve(homedir(), ".claude", "plugins", "marketplaces", "context-mode");
+  if (existsSync(join(marketplaceDir, ".git"))) {
+    s.start("Syncing marketplace clone");
+    try {
+      // Preserve user dev edits (Mert-class users symlink the clone to a worktree).
+      const statusOut = execFileSync(
+        "git", ["-C", marketplaceDir, "status", "--porcelain"],
+        { stdio: "pipe", encoding: "utf-8", timeout: 5000 },
+      );
+      if (statusOut.trim()) {
+        s.stop(color.yellow("Marketplace clone has local edits — skipping git pull"));
+        p.log.info(
+          color.dim(`  Run manually: git -C "${marketplaceDir}" stash && git pull --ff-only`),
+        );
+      } else {
+        execFileSync(
+          "git", ["-C", marketplaceDir, "fetch", "--tags", "origin"],
+          { stdio: "pipe", timeout: 30000 },
+        );
+        execFileSync(
+          "git", ["-C", marketplaceDir, "reset", "--hard", "origin/HEAD"],
+          { stdio: "pipe", timeout: 10000 },
+        );
+        s.stop(color.green("Marketplace clone synced"));
+        changes.push("Marketplace clone updated to upstream");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      s.stop(color.yellow("Marketplace sync skipped"));
+      p.log.warn(color.yellow("git refresh on marketplace failed") + ` — ${message}`);
+      p.log.info(color.dim("  Continuing — cache dir update will still happen."));
+    }
+  }
+
   // Step 1: Pull latest from GitHub
   p.log.step("Pulling latest from GitHub...");
   const localVersion = getLocalVersion();
@@ -707,12 +768,16 @@ async function upgrade() {
       } catch { /* some files may not exist in source */ }
     }
 
-    // Write .mcp.json with resolved absolute path (fixes #132)
+    // Write .mcp.json with CLAUDE_PLUGIN_ROOT placeholder (fixes #411).
+    // Absolute paths bake-in the current pluginRoot dir, which sessionstart.mjs
+    // (#181) deletes after upgrade — breaking MCP server resolution. The literal
+    // ${CLAUDE_PLUGIN_ROOT} placeholder is resolved by Claude at load-time and
+    // stays valid across version cleanups. Matches .claude-plugin/plugin.json.
     const mcpConfig = {
       mcpServers: {
         "context-mode": {
           command: "node",
-          args: [resolve(pluginRoot, "start.mjs")],
+          args: ["${CLAUDE_PLUGIN_ROOT}/start.mjs"],
         },
       },
     };
@@ -908,15 +973,45 @@ async function upgrade() {
  * ------------------------------------------------------- */
 
 function statuslineForward(): void {
-  const scriptPath = resolve(getPluginRoot(), "bin", "statusline.mjs");
-  if (!existsSync(scriptPath)) {
-    process.stderr.write(`statusline script missing: ${scriptPath}\n`);
-    process.exit(1);
+  // Try multiple plugin-root candidates in priority order. After ctx-upgrade,
+  // getPluginRoot() can resolve to a cache dir that sessionstart.mjs (#181)
+  // already cleaned, leaving bin/statusline.mjs missing. Falling back to the
+  // marketplace clone (#418-synced, stable across upgrades) and to the path
+  // Claude Code itself loads from (installed_plugins.json) keeps the bar
+  // alive instead of silently going blank.
+  const candidates: string[] = [
+    resolve(getPluginRoot(), "bin", "statusline.mjs"),
+    resolve(homedir(), ".claude", "plugins", "marketplaces", "context-mode", "bin", "statusline.mjs"),
+  ];
+
+  // installed_plugins.json may list one or more install paths CC actually
+  // loads from. Prefer those if they exist.
+  try {
+    const registryPath = resolve(homedir(), ".claude", "plugins", "installed_plugins.json");
+    if (existsSync(registryPath)) {
+      const registry = JSON.parse(readFileSync(registryPath, "utf-8"));
+      const entries = registry?.plugins?.["context-mode@context-mode"];
+      if (Array.isArray(entries)) {
+        for (const entry of entries) {
+          const installPath = entry?.installPath;
+          if (typeof installPath === "string" && installPath) {
+            candidates.push(resolve(installPath, "bin", "statusline.mjs"));
+          }
+        }
+      }
+    }
+  } catch { /* registry malformed — fall through to other candidates */ }
+
+  const scriptPath = candidates.find((c) => existsSync(c));
+  if (!scriptPath) {
+    // Statusline output is the user-facing status bar; stderr surfaces visibly
+    // in some terminals. Exit silently — the bar simply stays empty until the
+    // next /ctx-upgrade or restart resolves the path.
+    process.exit(0);
   }
   // Re-exec via dynamic import so stdin/stdout are inherited cleanly.
-  import(pathToFileURL(scriptPath).href).catch((err) => {
-    process.stderr.write(`statusline failed: ${err?.message ?? err}\n`);
-    process.exit(1);
+  import(pathToFileURL(scriptPath).href).catch(() => {
+    process.exit(0);
   });
 }
 
