@@ -55,7 +55,7 @@
         },
         "contextMode.autoActivate": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Automatically activate context mode when opening a workspace."
         },
         "contextMode.showStatusBar": {
