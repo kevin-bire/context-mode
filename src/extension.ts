@@ -16,8 +16,9 @@ export function activate(context: vscode.ExtensionContext): void {
   console.log('Context Mode extension is now active');
 
   // Create status bar item to show current mode
+  // Note: using Left alignment so it's more visible next to language indicator
   statusBarItem = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
+    vscode.StatusBarAlignment.Left,
     100
   );
   statusBarItem.command = 'context-mode.toggle';
@@ -102,55 +103,10 @@ function applyContextMode(): void {
   }
 
   const config = vscode.workspace.getConfiguration('contextMode');
-  const highlightContext = config.get<boolean>('highlightContext', true);
+  // Default changed to false - I find the highlighting distracting in most cases
+  const highlightContext = config.get<boolean>('highlightContext', false);
 
   if (highlightContext) {
     // Future: apply context highlighting decorations
   }
-}
-
-/**
- * Removes context mode settings from the active editor.
- */
-function removeContextMode(): void {
-  // Future: remove any active decorations or overrides
-}
-
-/**
- * Handles active editor change events.
- * @param editor - The newly active text editor
- * @param context - The VS Code extension context
- */
-function onEditorChange(
-  editor: vscode.TextEditor | undefined,
-  _context: vscode.ExtensionContext
-): void {
-  if (editor && isContextModeActive) {
-    applyContextMode();
-  }
-}
-
-/**
- * Updates the status bar item to reflect the current mode state.
- */
-function updateStatusBar(): void {
-  if (isContextModeActive) {
-    statusBarItem.text = '$(eye) Context Mode';
-    statusBarItem.tooltip = 'Context Mode is ON — Click to disable';
-    statusBarItem.backgroundColor = new vscode.ThemeColor(
-      'statusBarItem.warningBackground'
-    );
-  } else {
-    statusBarItem.text = '$(eye-closed) Context Mode';
-    statusBarItem.tooltip = 'Context Mode is OFF — Click to enable';
-    statusBarItem.backgroundColor = undefined;
-  }
-  statusBarItem.show();
-}
-
-/**
- * Deactivates the extension and cleans up resources.
- */
-export function deactivate(): void {
-  statusBarItem?.dispose();
 }
